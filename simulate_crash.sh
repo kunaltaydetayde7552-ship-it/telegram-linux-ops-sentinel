@@ -159,7 +159,10 @@ run_verification_only() {
         info "Systemd Properties:"
         systemctl show "${TARGET_SERVICE}" --property=Restart,RestartSec,StartLimitIntervalSec,StartLimitBurst,ActiveState,SubState
     else
-        warn "Service '${TARGET_SERVICE}' is NOT currently active ($(systemctl is-active "${TARGET_SERVICE}" 2>/dev/null || echo "inactive"))."
+        local cur_state
+        cur_state=$(systemctl is-active "${TARGET_SERVICE}" 2>/dev/null)
+        cur_state="${cur_state:-inactive}"
+        warn "Service '${TARGET_SERVICE}' is NOT currently active (${cur_state})."
         info "Review status via: systemctl status ${TARGET_SERVICE}"
     fi
     exit 0
@@ -243,7 +246,11 @@ run_live_crash_simulation() {
     info "Validating operational status of unit: ${TARGET_SERVICE}..."
     if ! is_service_active "${TARGET_SERVICE}"; then
         warn "Service '${TARGET_SERVICE}' is not running. Attempting to start service..."
-        sudo systemctl start "${TARGET_SERVICE}"
+        if command -v sudo >/dev/null 2>&1; then
+            sudo -n systemctl start "${TARGET_SERVICE}" 2>/dev/null || sudo systemctl start "${TARGET_SERVICE}"
+        else
+            systemctl start "${TARGET_SERVICE}"
+        fi
         sleep 2
         if ! is_service_active "${TARGET_SERVICE}"; then
             danger "ERROR: Failed to start '${TARGET_SERVICE}'. Please check 'systemctl status ${TARGET_SERVICE}'."

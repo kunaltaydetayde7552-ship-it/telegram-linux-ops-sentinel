@@ -323,6 +323,12 @@ def safe_restart_service(service_name: str, operator_name: str) -> Dict[str, Any
 
 def fetch_service_logs(service_name: Optional[str] = None, lines: int = 50) -> str:
     """Fetch recent system or service logs using journalctl or fallback."""
+    import re
+    from collections import deque
+
+    if service_name and not re.match(r"^[a-zA-Z0-9_\-\.]+$", service_name):
+        return f"[Security Block] Invalid service name '{service_name}'. Only alphanumeric characters, hyphens, dots, and underscores are permitted."
+
     if not is_linux():
         return (
             f"[Simulated Non-Linux Log for {service_name or 'system'}]\n"
@@ -342,13 +348,13 @@ def fetch_service_logs(service_name: Optional[str] = None, lines: int = 50) -> s
     if code == 0 and out.strip():
         return out.strip()
 
-    # Fallback to /var/log/syslog if journalctl yields nothing
+    # Fallback to /var/log/syslog if journalctl yields nothing (using deque to prevent OOM)
     for log_path in ["/var/log/syslog", "/var/log/messages"]:
         if os.path.exists(log_path):
             try:
                 with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                    all_lines = f.readlines()
-                return "".join(all_lines[-lines:])
+                    recent_lines = deque(f, lines)
+                return "".join(recent_lines)
             except Exception:
                 pass
 
@@ -426,6 +432,14 @@ def analyze_logs_heuristic(log_text: str, service_name: str) -> str:
             analysis.append("- Use `/restart <service>` to trigger automatic stale PID lock cleanup.")
         if "Resource Exhaustion" in matched_issues:
             analysis.append("- Clean up old logs, cache, or increase file descriptor limits.")
+        if "Segmentation Fault" in matched_issues:
+            analysis.append("- Native crash detected. Inspect core dump and check binary/C-extension dependencies.")
+        if "Network / Connection Refusal" in matched_issues:
+            analysis.append("- Verify remote host reachability, DNS resolution, and firewall rules.")
+        if "Permission / Access Denied" in matched_issues:
+            analysis.append("- Check file permissions or verify sudo/Polkit execution rights for the service.")
+        if "Python Traceback / Unhandled Exception" in matched_issues:
+            analysis.append("- Review the stack trace excerpt above, validate input payloads, and inspect recent code changes.")
     else:
         analysis.append("**Findings:** No critical fatal crashes detected in the last sample.")
 
@@ -776,8 +790,8 @@ async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=constants.ParseMode.MARKDOWN,
     )
 
-    log_content = fetch_service_logs(service_target, lines=50)
-    ai_summary = analyze_logs_with_ai(log_content, display_target)
+    log_content = await asyncio.to_thread(fetch_service_logs, service_target, lines=50)
+    ai_summary = await asyncio.to_thread(analyze_logs_with_ai, log_content, display_target)
 
     # Prepare response: AI Summary + Tail 15 lines of raw log
     tail_lines = "\n".join(log_content.splitlines()[-15:])
@@ -791,6 +805,8 @@ async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {tail_lines}
 ```
 """
+    if len(reply) > 4000:
+        reply = reply[:3950] + "\n```\n... [Log tail truncated for Telegram limit]"
     await status_msg.edit_text(reply, parse_mode=constants.ParseMode.MARKDOWN)
 
 
@@ -813,7 +829,7 @@ async def cmd_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=constants.ParseMode.MARKDOWN,
     )
 
-    result = safe_restart_service(service_name, operator_name=f"@{username}")
+    result = await asyncio.to_thread(safe_restart_service, service_name, operator_name=f"@{username}")
 
     icon = "✅" if result["success"] else "❌"
     actions_formatted = "\n".join([f"  • {a}" for a in result.get("actions", [])])
@@ -883,9 +899,12 @@ async def scheduled_health_check(context: ContextTypes.DEFAULT_TYPE):
     alerts = []
 
     # 1. CPU & Memory thresholds
-    cpu = psutil.cpu_percent(interval=None)
-    mem = psutil.virtual_memory().percent
-    disk = psutil.disk_usage("/" if is_linux() else "C:\\").percent
+    if psutil is not None:
+        cpu = psutil.cpu_percent(interval=None)
+        mem = psutil.virtual_memory().percent
+        disk = psutil.disk_usage("/" if is_linux() else "C:\\").percent
+    else:
+        cpu, mem, disk = 0.0, 0.0, 0.0
 
     if cpu >= CPU_ALERT_THRESHOLD and should_send_alert("alert_cpu"):
         alerts.append(f"⚠️ **High CPU Utilization:** `{cpu}%` (Threshold: {CPU_ALERT_THRESHOLD}%)")

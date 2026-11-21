@@ -27,7 +27,8 @@ set -uo pipefail
 CRON_TAG_BEGIN="# >>> BEGIN TELEGRAM OPS SENTINEL JOBS >>>"
 CRON_TAG_END="# <<< END TELEGRAM OPS SENTINEL JOBS <<<"
 
-BASE_DIR="/opt/telegram-ops-sentinel"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+BASE_DIR="${OPS_BASE_DIR:-${SCRIPT_DIR:-/opt/telegram-linux-ops-sentinel}}"
 LOG_DIR="${BASE_DIR}/logs"
 ARCHIVE_DIR="${LOG_DIR}/archive"
 VAR_LOG_DIR="/var/log/ops-sentinel"

@@ -25,18 +25,19 @@ Wants=network-online.target
 Type=simple
 
 # User and Group permissions
-# Adjust User/Group to match your Linux deployment environment (e.g. ubuntu, ec2-user, debian, or opsbot)
-User=ubuntu
-Group=ubuntu
+# Note: Root is recommended if you manage systemd services and clear system PID lockfiles across hosts.
+# If deploying as unprivileged user (e.g. User=ubuntu), ensure passwordless sudo/polkit rules for systemctl and journalctl.
+User=root
+Group=root
 
 # Working Directory & Environment
-WorkingDirectory=/opt/telegram-ops-sentinel
+WorkingDirectory=/opt/telegram-linux-ops-sentinel
 Environment=PYTHONUNBUFFERED=1
 Environment=ENVIRONMENT=production
-EnvironmentFile=-/opt/telegram-ops-sentinel/.env
+EnvironmentFile=-/opt/telegram-linux-ops-sentinel/.env
 
 # Command Execution
-ExecStart=/opt/telegram-ops-sentinel/venv/bin/python /opt/telegram-ops-sentinel/ops_sentinel.py
+ExecStart=/opt/telegram-linux-ops-sentinel/venv/bin/python /opt/telegram-linux-ops-sentinel/ops_sentinel.py
 ExecReload=/bin/kill -HUP $MAINPID
 
 # 24/7 Self-Healing & Auto-Restart Policies

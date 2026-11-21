@@ -1,0 +1,71 @@
+# ==============================================================================
+# Telegram & Linux AI Ops Sentinel - Systemd Unit File
+# File: /etc/systemd/system/ops-sentinel.service
+#
+# Production systemd unit configuration for 24/7 background operation,
+# automated crash detection, self-healing restarts, and sandboxing.
+#
+# Installation Instructions:
+#   1. Copy file:      sudo cp ops-sentinel.service /etc/systemd/system/ops-sentinel.service
+#   2. Reload daemon:  sudo systemctl daemon-reload
+#   3. Enable on boot: sudo systemctl enable ops-sentinel.service
+#   4. Start service:  sudo systemctl start ops-sentinel.service
+#   5. Verify status:  sudo systemctl status ops-sentinel.service
+#   6. Follow logs:    sudo journalctl -u ops-sentinel -f
+# ==============================================================================
+
+[Unit]
+Description=Telegram & Linux AI Ops Sentinel - 24/7 Cloud Autonomous Monitor
+Documentation=https://github.com/kunaltaydetayde7552-ship-it/telegram-linux-ops-sentinel
+After=network.target network-online.target systemd-journald.service
+Wants=network-online.target
+
+[Service]
+# Execution Mode
+Type=simple
+
+# User and Group permissions
+# Adjust User/Group to match your Linux deployment environment (e.g. ubuntu, ec2-user, debian, or opsbot)
+User=ubuntu
+Group=ubuntu
+
+# Working Directory & Environment
+WorkingDirectory=/opt/telegram-ops-sentinel
+Environment=PYTHONUNBUFFERED=1
+Environment=ENVIRONMENT=production
+EnvironmentFile=-/opt/telegram-ops-sentinel/.env
+
+# Command Execution
+ExecStart=/opt/telegram-ops-sentinel/venv/bin/python /opt/telegram-ops-sentinel/ops_sentinel.py
+ExecReload=/bin/kill -HUP $MAINPID
+
+# 24/7 Self-Healing & Auto-Restart Policies
+Restart=always
+RestartSec=5
+
+# Rate Limiting for Crash Loops:
+# If the service restarts more than 5 times within 60 seconds, back off to prevent CPU throttling.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# Standard Output & Journald Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ops-sentinel
+
+# Process & Resource Limits
+LimitNOFILE=65535
+TimeoutStartSec=30
+TimeoutStopSec=15
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Security Hardening & Sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/telegram-ops-sentinel/logs /opt/telegram-ops-sentinel/data /var/log/ops-sentinel
+
+[Install]
+WantedBy=multi-user.target
